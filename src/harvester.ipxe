@@ -1,0 +1,46 @@
+#!ipxe
+
+# Harvester
+# https://harvesterhci.io/
+# https://docs.harvesterhci.io/v1.0/install/pxe-boot-install/
+dhcp
+goto ${menu} ||
+
+:harvester
+set os HarvesterGeneric
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+menu ${os} - ${os_arch}
+item --gap DesiredVersion:
+item harvester_desired_version ${space} Set the desired version of Harvester: ${harvester_desired_version}
+item --gap HarvesterGeneric:
+item harvester_url ${space} Begin install of Harvester ${os}
+choose --default ${menu} menu || goto harvester_exit
+echo ${cls}
+goto ${menu} ||
+goto harvester_exit
+
+
+
+:harvester_desired_version
+echo -n Set desired Harvester Version:  && read harvester_desired_version
+clear menu
+goto harvester
+
+:harvester_url
+echo -n Set the Harvester Fileserver URL with Port and http protocol:  && read harvester_url
+goto harvester_boot
+
+:harvester_boot
+imgfetch ${harvester_url}/1mb
+set install_params harvester.install.automatic=false harvester.install.wipe_disks=true harvester.install.iso_url=${harvester_url}/${harvester_desired_version}/harvester-${harvester_desired_version}-amd64.iso
+set boot_params ip=dhcp net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable root=live:${harvester_url}/${harvester_desired_version}/harvester-${harvester_desired_version}-rootfs-amd64.squashfs rd.noverifyssl
+imgfree
+kernel ${harvester_url}/${harvester_desired_version}/harvester-${harvester_desired_version}-vmlinuz-amd64 ${install_params} ${boot_params}
+initrd ${harvester_url}/${harvester_desired_version}/harvester-${harvester_desired_version}-initrd-amd64
+echo
+boot
+
+:harvester_exit
+clear menu
+exit 0

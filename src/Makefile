@@ -94,7 +94,7 @@ SRCDIRS		+= interface/pxe interface/efi interface/smbios
 SRCDIRS		+= interface/bofm
 SRCDIRS		+= interface/xen
 SRCDIRS		+= interface/hyperv
-SRCDIRS		+= tests
+#SRCDIRS		+= tests
 SRCDIRS		+= crypto crypto/mishmash
 SRCDIRS		+= hci hci/commands hci/tui
 SRCDIRS		+= hci/mucurses hci/mucurses/widgets
@@ -108,9 +108,9 @@ SRCDIRS		+= config
 SRCDIRS_INSEC	+= net/oncrpc
 SRCDIRS_INSEC	+= net/80211
 SRCDIRS_INSEC	+= drivers/net/rtl818x
-SRCDIRS_INSEC	+= drivers/net/ath
-SRCDIRS_INSEC	+= drivers/net/ath/ath5k
-SRCDIRS_INSEC	+= drivers/net/ath/ath9k
+#SRCDIRS_INSEC	+= drivers/net/ath
+#SRCDIRS_INSEC	+= drivers/net/ath/ath5k
+#SRCDIRS_INSEC	+= drivers/net/ath/ath9k
 
 # NON_AUTO_SRCS lists files that are excluded from the normal
 # automatic build system.
@@ -183,13 +183,13 @@ everything :
 #
 vmware : bin/8086100f.mrom bin/808610d3.mrom bin/10222000.rom bin/15ad07b0.rom
 	@$(ECHO) '==========================================================='
-	@$(ECHO) 
+	@$(ECHO)
 	@$(ECHO) 'Available ROMs:'
 	@$(ECHO) '    bin/8086100f.mrom -- intel/e1000'
 	@$(ECHO) '    bin/808610d3.mrom -- intel/e1000e'
 	@$(ECHO) '    bin/10222000.rom  -- vlance/pcnet32'
 	@$(ECHO) '    bin/15ad07b0.rom  -- vmxnet3'
-	@$(ECHO) 
+	@$(ECHO)
 	@$(ECHO) 'For more information, see http://ipxe.org/howto/vmware'
 	@$(ECHO)
 	@$(ECHO) '==========================================================='
