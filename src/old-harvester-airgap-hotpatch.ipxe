@@ -1,0 +1,370 @@
+#!ipxe
+
+#Harvester - Advanced PXE Boot Script with Full Configuration and Defaults
+
+#--- 1. Initial Network Setup (VLAN 2013) A ---
+
+# echo "-------------------------------------------------------------------"
+# echo "Setting up VLAN 2013 on net0 and attempting DHCP..."
+# vcreate --tag 2013 net0
+
+# dhcp net0-2013 || goto net_fail_2013
+
+#--- 1. Initial Network Setup (VLAN 2014) B ---
+
+echo "-------------------------------------------------------------------"
+echo "Setting up VLAN 2014 on net0 and attempting DHCP..."
+vcreate --tag 2014 net0
+
+dhcp net0-2014 || goto net_fail_2014
+
+goto set_harvester_defaults
+
+# :net_fail_2013
+# echo "-------------------------------------------------------------------"
+# echo "ERROR: DHCP failed on VLAN 2013 (net0-2013). Check network setup."
+# echo "-------------------------------------------------------------------"
+# prompt --timeout 15000 Press [Enter] to drop to iPXE Shell || reboot
+# shell
+# reboot
+
+:net_fail_2014
+echo "-------------------------------------------------------------------"
+echo "ERROR: DHCP failed on VLAN 2014 (net0-2014). Check network setup."
+echo "-------------------------------------------------------------------"
+prompt --timeout 15000 Press [Enter] to drop to iPXE Shell || reboot
+shell
+reboot
+
+#--- 2. Set ALL Harvester Kernel Parameter Defaults ---
+
+:set_harvester_defaults
+
+#General/Required Settings (User must set these in the menu)
+
+set harvester_desired_version v1.7.0
+set harvester_artifact_server http://10.115.1.6/iso
+set harvester_configuration_url http://10.115.1.6/iso/config/airgap-create.yaml
+
+#OS / Host Configuration Defaults
+
+set h_token t
+set h_scheme_ver 1
+set h_os_pass t
+set h_hostname airgap-node
+set h_modules kvm,nvme
+set h_ntp 10.115.2.116
+set h_dns 10.115.1.70
+set h_sftp true
+
+#Network Configuration Defaults
+
+set h_vip_mode static
+set h_vip 10.115.16.217/32
+set h_mgmt_if_name eno49
+set h_mgmt_bond_mode active-backup
+set h_mgmt_method static
+set h_mgmt_ip 10.115.16.117/21
+set h_mgmt_mask 255.255.248.0
+set h_mgmt_gw 10.115.15.254
+set h_mgmt_vlan:int32 2013
+
+#Install Configuration Defaults
+
+set h_auto true
+set h_mode create
+set h_install_dev /dev/nvme0n1
+set h_data_disk /dev/nvme0n1
+set h_skip_checks true
+set h_wipe_list /dev/nvme0n1
+
+goto harvester
+
+#--- 3. Harvester Main Menu Logic ---
+
+:harvester
+set os HarvesterGeneric
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+
+menu ${os} - ${os_arch} - Configuration Menu
+item --gap "-------------------------------------------------------------------"
+item config_general Set Harvester Version, Config URL, Fileserver URL (Required)
+# item config_network Set Network Configuration (${h_mgmt_ip})
+# item config_os_host Set OS and Hostname (${h_hostname})
+# item config_install Set Installation and Disk (${h_install_dev})
+item --gap "-------------------------------------------------------------------"
+item harvester_boot_check Start Harvester Installation
+item harvester_exit Exit iPXE (continue to next boot device)
+
+#SET TIMEOUT: Defaults to harvester_exit after 30 seconds (30000ms)
+
+choose --timeout 30000 --default harvester_exit menu || goto harvester
+echo ${cls}
+
+#Execute the chosen menu item by jumping to its label
+
+goto ${menu}
+
+#--- 4. Sub-Menu Definitions ---
+
+:config_general
+menu General Configuration
+item set_version ${space} Harvester Version: ${harvester_desired_version}
+item set_url ${space} Fileserver URL: ${harvester_artifact_server}
+item set_config_url ${space} Harvester Configuration URL: ${harvester_configuration_url}
+item --key x back_to_main Return to Main Menu
+choose menu || goto harvester
+goto ${menu}
+
+# :config_os_host
+# menu OS/Host Configuration
+# item set_hostname ${space} Hostname: ${h_hostname}
+# item set_os_pass ${space} OS Password: ${h_os_pass}
+# item set_token ${space} Cluster Token: ${h_token}
+# item set_scheme_ver ${space} Scheme Version: ${h_scheme_ver}
+# item set_modules ${space} OS Modules: ${h_modules}
+# item set_ntp ${space} NTP Servers: ${h_ntp}
+# item set_dns ${space} DNS Nameserver: ${h_dns}
+# item set_sftp ${space} Enable SFTP: ${h_sftp}
+# item --key x back_to_main Return to Main Menu
+# choose menu || goto harvester
+# goto ${menu}
+
+# :config_network
+# menu Network Configuration
+# item set_mgmt_if_name ${space} Management NIC: ${h_mgmt_if_name}
+# item set_mgmt_bond_mode ${space} Bond Mode: ${h_mgmt_bond_mode}
+# item set_mgmt_method ${space} Mgmt IP Method: ${h_mgmt_method}
+# item set_mgmt_ip ${space} Mgmt IP/CIDR: ${h_mgmt_ip}
+# item set_mgmt_mask ${space} Mgmt Subnet Mask: ${h_mgmt_mask}
+# item set_mgmt_gw ${space} Mgmt Gateway: ${h_mgmt_gw}
+# item set_mgmt_vlan ${space} Mgmt VLAN ID: ${h_mgmt_vlan}
+# item set_vip_mode ${space} VIP Mode: ${h_vip_mode}
+# item set_vip ${space} VIP Address/Mask: ${h_vip}
+# item --key x back_to_main Return to Main Menu
+# choose menu || goto harvester
+# goto ${menu}
+
+# :config_install
+# menu Installation and Disk Configuration
+# item set_auto ${space} Automatic Install: ${h_auto}
+# item set_mode ${space} Install Mode: ${h_mode}
+# item set_install_dev ${space} Install Device: ${h_install_dev}
+# item set_data_disk ${space} Data Disk: ${h_data_disk}
+# item set_wipe_list ${space} Wipe Disks List: ${h_wipe_list}
+# item set_skip_checks ${space} Skip Checks: ${h_skip_checks}
+# item --key x back_to_main Return to Main Menu
+# choose menu || goto harvester
+# goto ${menu}
+
+:back_to_main
+clear menu
+goto harvester
+
+#--- 5. Input Labels (Set Value or use Default) ---
+
+#Pattern for all inputs: read input_value, if not empty, set the variable.
+
+:set_version
+echo -n Set desired Harvester Version (e.g., v1.3.0) (Default: ${harvester_desired_version}): && read input_value
+iseq ${input_value} "" || set harvester_desired_version ${input_value}
+clear menu
+goto config_general
+
+:set_url
+echo -n Set the Harvester Fileserver URL (Default: ${harvester_artifact_server}): && read input_value
+iseq ${input_value} "" || set harvester_artifact_server ${input_value}
+clear menu
+goto config_general
+
+:set_config_url
+echo -n Set the Harvester Configuration URL (Default: ${harvester_configuration_url}): && read input_value
+iseq ${input_value} "" || set harvester_configuration_url ${input_value}
+clear menu
+goto config_general
+
+# :set_hostname
+# echo -n Set Hostname (Default: ${h_hostname}): && read input_value
+# iseq ${input_value} "" || set h_hostname ${input_value}
+# clear menu
+# goto config_os_host
+
+# :set_os_pass
+# echo -n Set OS Password (Default: ${h_os_pass}): && read input_value
+# iseq ${input_value} "" || set h_os_pass ${input_value}
+# clear menu
+# goto config_os_host
+
+# :set_token
+# echo -n Set Cluster Token (Default: ${h_token}): && read input_value
+# iseq ${input_value} "" || set h_token ${input_value}
+# clear menu
+# goto config_os_host
+
+# :set_scheme_ver
+# echo -n Set Scheme Version (Default: ${h_scheme_ver}): && read input_value
+# iseq ${input_value} "" || set h_scheme_ver ${input_value}
+# clear menu
+# goto config_os_host
+
+# :set_modules
+# echo -n Set OS Modules (Default: ${h_modules}): && read input_value
+# iseq ${input_value} "" || set h_modules ${input_value}
+# clear menu
+# goto config_os_host
+
+# :set_ntp
+# echo -n Set NTP Servers (Default: ${h_ntp}): && read input_value
+# iseq ${input_value} "" || set h_ntp ${input_value}
+# clear menu
+# goto config_os_host
+
+# :set_dns
+# echo -n Set DNS Nameserver (Default: ${h_dns}): && read input_value
+# iseq ${input_value} "" || set h_dns ${input_value}
+# clear menu
+# goto config_os_host
+
+# :set_sftp
+# echo -n Enable SFTP (true/false) (Default: ${h_sftp}): && read input_value
+# iseq ${input_value} "" || set h_sftp ${input_value}
+# clear menu
+# goto config_os_host
+
+# :set_mgmt_if_name
+# echo -n Set Management NIC Name (Default: ${h_mgmt_if_name}): && read input_value
+# iseq ${input_value} "" || set h_mgmt_if_name ${input_value}
+# clear menu
+# goto config_network
+
+# :set_mgmt_bond_mode
+# echo -n Set Bond Mode (Default: ${h_mgmt_bond_mode}): && read input_value
+# iseq ${input_value} "" || set h_mgmt_bond_mode ${input_value}
+# clear menu
+# goto config_network
+
+# :set_mgmt_method
+# echo -n Set Mgmt IP Method (Default: ${h_mgmt_method}): && read input_value
+# iseq ${input_value} "" || set h_mgmt_method ${input_value}
+# clear menu
+# goto config_network
+
+# :set_mgmt_ip
+# echo -n Set Mgmt IP/CIDR (Default: ${h_mgmt_ip}): && read input_value
+# iseq ${input_value} "" || set h_mgmt_ip ${input_value}
+# clear menu
+# goto config_network
+
+# :set_mgmt_mask
+# echo -n Set Mgmt Subnet Mask (Default: ${h_mgmt_mask}): && read input_value
+# iseq ${input_value} "" || set h_mgmt_mask ${input_value}
+# clear menu
+# goto config_network
+
+# :set_mgmt_gw
+# echo -n Set Mgmt Gateway (Default: ${h_mgmt_gw}): && read input_value
+# iseq ${input_value} "" || set h_mgmt_gw ${input_value}
+# clear menu
+# goto config_network
+
+# :set_mgmt_vlan
+# echo -n Set Mgmt VLAN ID (Default: ${h_mgmt_vlan}): && read input_value
+# iseq ${input_value} "" || set h_mgmt_vlan:int32 ${input_value}
+# clear menu
+# goto config_network
+
+# :set_vip_mode
+# echo -n Set VIP Mode (Default: ${h_vip_mode}): && read input_value
+# iseq ${input_value} "" || set h_vip_mode ${input_value}
+# clear menu
+# goto config_network
+
+# :set_vip
+# echo -n Set VIP Address/Mask (Default: ${h_vip}): && read input_value
+# iseq ${input_value} "" || set h_vip ${input_value}
+# clear menu
+# goto config_network
+
+# :set_auto
+# echo -n Set Automatic Install (true/false) (Default: ${h_auto}): && read input_value
+# iseq ${input_value} "" || set h_auto ${input_value}
+# clear menu
+# goto config_install
+
+# :set_mode
+# echo -n Set Install Mode (Default: ${h_mode}): && read input_value
+# iseq ${input_value} "" || set h_mode ${input_value}
+# clear menu
+# goto config_install
+
+# :set_install_dev
+# echo -n Set Install Device (e.g., /dev/sda) (Default: ${h_install_dev}): && read input_value
+# iseq ${input_value} "" || set h_install_dev ${input_value}
+# clear menu
+# goto config_install
+
+# :set_data_disk
+# echo -n Set Data Disk (Default: ${h_data_disk}): && read input_value
+# iseq ${input_value} "" || set h_data_disk ${input_value}
+# clear menu
+# goto config_install
+
+# :set_skip_checks
+# echo -n Skip Checks (true/false) (Default: ${h_skip_checks}): && read input_value
+# iseq ${input_value} "" || set h_skip_checks ${input_value}
+# clear menu
+# goto config_install
+
+# :set_wipe_list
+# echo -n Set Wipe Disks List (e.g., /dev/sda,/dev/sdb) (Default: ${h_wipe_list}): && read input_value
+# iseq ${input_value} "" || set h_wipe_list ${input_value}
+# clear menu
+# goto config_install
+
+#--- 6. Boot Logic (Constructing final params) ---
+
+:harvester_boot_check
+
+#Final check for required fields
+
+sub iseq ${harvester_desired_version} "" && echo -n ERROR: Harvester Version is required! && sleep 3 && goto harvester ||
+sub iseq ${harvester_artifact_server} "" && echo -n ERROR: Fileserver URL is required! && sleep 3 && goto harvester ||
+sub iseq ${harvester_configuration_url} "" && echo -n ERROR: Harvester Configuration URL is required! && sleep 3 && goto harvester ||
+goto harvester_boot
+
+:harvester_boot
+
+#1. CONSTRUCT INSTALL_PARAMS (All 22 variables)
+
+#FIX: Corrected multiline variable assignment to ensure proper concatenation.
+# harvester.install.managementInterface.vlanId=${h_mgmt_vlan} -> it can't work, currently: https://github.com/harvester/harvester/issues/9667
+# harvester.install.skipChecks=${h_skip_checks} -> it can't work, currently: https://github.com/harvester/harvester/issues/9667
+# harvester.schemeVersion=${h_scheme_ver} -> it can't work, currently: https://github.com/harvester/harvester/issues/9667
+# harvester.token=${h_token} harvester.os.password=${h_os_pass}
+#harvester.os.hostname=${h_hostname} harvester.os.modules=${h_modules} harvester.os.ntpServers=${h_ntp} harvester.os.dnsNameservers=${h_dns} harvester.os.sshd.sftp=${h_sftp} harvester.install.mode=${h_mode} harvester.install.vipMode=${h_vip_mode} harvester.install.vip=${h_vip} harvester.install.managementInterface.interfaces[0].name=${h_mgmt_if_name} harvester.install.interfacesStringHackName=${h_mgmt_if_name} harvester.install.managementInterface.bondOptions.mode=${h_mgmt_bond_mode} harvester.install.managementInterface.method=${h_mgmt_method} harvester.install.managementInterface.ip=${h_mgmt_ip} harvester.install.managementInterface.subnetMask=${h_mgmt_mask} harvester.install.managementInterface.gateway=${h_mgmt_gw} harvester.install.device=${h_install_dev} harvester.install.dataDisk=${h_data_disk} harvester.install.managementInterface.vlanIdString=${h_mgmt_vlan} harvester.install.wipeDisksList=${h_wipe_list}
+set install_params harvester.install.iso_url=${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-amd64.iso harvester.install.config_url=${harvester_configuration_url} harvester.install.automatic=true
+
+set console_setting console=tty1
+iseq ${h_auto} false && set console_setting console=tty1 console=ttyS0 ||
+#2. CONSTRUCT BOOT_PARAMS
+
+#NOTE: Removed conflicting network parameters from the kernel command line.
+#vlan=vlan2014:eno49 ip=vlan2014:dhcp
+# /2009-04-04/user-data ifname=netboot:8c:dc:d4:b5:ca:98  vlan=vlan2021:netboot
+# vlan=vlan2013:eno49 ip=vlan2013:dhcp
+# net0-2013
+# ifname=net0-2013 ip=net0-2013:dhcp vlan=2013:net0
+# vlan=2013:eno49 ip=vlan2013:dhcp
+set boot_params net.ifnames=1 vlan=vlan2014:eno49 ip=vlan2014:dhcp ${console_setting} rd.cos.disable root=live:${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-rootfs-amd64.squashfs rd.noverifyssl intel_iommu=on amd_iommu=on iommu=pt
+
+#3. KERNEL & INITRD LOAD
+
+kernel ${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-vmlinuz-amd64 ${install_params} ${boot_params}
+initrd ${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-initrd-amd64
+echo
+boot
+
+:harvester_exit
+clear menu
+exit 0

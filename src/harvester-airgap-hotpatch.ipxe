@@ -1,0 +1,114 @@
+#!ipxe
+
+#Harvester - Advanced PXE Boot Script with Full Configuration and Defaults
+
+echo "-------------------------------------------------------------------"
+echo "Setting up VLAN 2014 on net0 and attempting DHCP..."
+vcreate --tag 2014 net0
+
+dhcp net0-2014 || goto net_fail_2014
+
+goto set_harvester_defaults
+
+:net_fail_2014
+echo "-------------------------------------------------------------------"
+echo "ERROR: DHCP failed on VLAN 2014 (net0-2014). Check network setup."
+echo "-------------------------------------------------------------------"
+prompt --timeout 15000 Press [Enter] to drop to iPXE Shell || reboot
+shell
+reboot
+
+
+:set_harvester_defaults
+
+set harvester_desired_version v1.7.0
+set harvester_artifact_server http://10.115.1.6/iso
+set harvester_configuration_url http://10.115.1.6/iso/config/airgap-create.yaml
+
+
+#Install Configuration Defaults
+
+set h_auto true
+
+goto harvester
+
+
+
+:harvester
+set os HarvesterGeneric
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+
+menu ${os} - ${os_arch} - Configuration Menu
+item --gap "-------------------------------------------------------------------"
+item config_general Set Harvester Version, Config URL, Fileserver URL (Required)
+item --gap "-------------------------------------------------------------------"
+item harvester_boot_check Start Harvester Installation
+item harvester_exit Exit iPXE (continue to next boot device)
+
+
+choose --timeout 30000 --default harvester_exit menu || goto harvester
+echo ${cls}
+
+
+goto ${menu}
+
+
+:config_general
+menu General Configuration
+item set_version ${space} Harvester Version: ${harvester_desired_version}
+item set_url ${space} Fileserver URL: ${harvester_artifact_server}
+item set_config_url ${space} Harvester Configuration URL: ${harvester_configuration_url}
+item --key x back_to_main Return to Main Menu
+choose menu || goto harvester
+goto ${menu}
+
+
+:back_to_main
+clear menu
+goto harvester
+
+
+:set_version
+echo -n Set desired Harvester Version (e.g., v1.3.0) (Default: ${harvester_desired_version}): && read input_value
+iseq ${input_value} "" || set harvester_desired_version ${input_value}
+clear menu
+goto config_general
+
+:set_url
+echo -n Set the Harvester Fileserver URL (Default: ${harvester_artifact_server}): && read input_value
+iseq ${input_value} "" || set harvester_artifact_server ${input_value}
+clear menu
+goto config_general
+
+:set_config_url
+echo -n Set the Harvester Configuration URL (Default: ${harvester_configuration_url}): && read input_value
+iseq ${input_value} "" || set harvester_configuration_url ${input_value}
+clear menu
+goto config_general
+
+:harvester_boot_check
+
+sub iseq ${harvester_desired_version} "" && echo -n ERROR: Harvester Version is required! && sleep 3 && goto harvester ||
+sub iseq ${harvester_artifact_server} "" && echo -n ERROR: Fileserver URL is required! && sleep 3 && goto harvester ||
+sub iseq ${harvester_configuration_url} "" && echo -n ERROR: Harvester Configuration URL is required! && sleep 3 && goto harvester ||
+goto harvester_boot
+
+:harvester_boot
+
+set install_params harvester.install.iso_url=${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-amd64.iso harvester.install.config_url=${harvester_configuration_url} harvester.install.automatic=true
+
+set console_setting console=tty1
+iseq ${h_auto} false && set console_setting console=tty1 console=ttyS0 ||
+
+set boot_params net.ifnames=1 vlan=vlan2014:eno49 ip=vlan2014:dhcp ${console_setting} rd.cos.disable root=live:${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-rootfs-amd64.squashfs rd.noverifyssl intel_iommu=on amd_iommu=on iommu=pt
+
+
+kernel ${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-vmlinuz-amd64 ${install_params} ${boot_params}
+initrd ${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-initrd-amd64
+echo
+boot
+
+:harvester_exit
+clear menu
+exit 0
