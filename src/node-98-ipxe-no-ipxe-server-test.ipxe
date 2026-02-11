@@ -1,0 +1,16 @@
+#!ipxe
+echo "-------------------------------------------------------------------"
+echo "Setting up VLAN 2017 on net0 and attempting DHCP..."
+vcreate --tag 2017 net0
+dhcp net0-2017
+echo "-------------------------------------------------------------------"
+echo "DHCP successful on VLAN 2017 (net0-2017). Proceeding with Harvester installation, no ipxe server, bootstrap..."
+set harvester_desired_version master
+set harvester_artifact_server http://10.115.1.6/iso
+set install_params harvester.os.dns_nameservers="10.115.252.1" harvester.os.ntp_servers="time1.google.com,time2.google.com,time3.google.com" harvester.install.management_interface.bond_options.mode="active-backup" harvester.install.management_interface.bond_options.miimon="100" harvester.install.management_interface.method="static" harvester.install.management_interface.ip="10.115.48.98" harvester.install.management_interface.gateway="10.115.55.254" harvester.install.management_interface.subnet_mask="255.255.248.0" harvester.install.management_interface.vlan_id="2017" harvester.install.vip="10.115.48.198" harvester.install.vip_mode="static" harvester.install.device="/dev/nvme0n1" harvester.os.hostname=mr-98 harvester.scheme_version=1 harvester.token=t harvester.os.modules="nvme" harvester.os.password=t harvester.install.mode=create harvester.install.persistent_partition_size=175Gi harvester.install.wipe_disks_list="/dev/nvme0n1" harvester.install.skipchecks=true harvester.install.management_interface.interfaces="hwAddr:8c:dc:d4:b5:c7:08,name:eno49" harvester.install.iso_url=${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-amd64.iso harvester.install.automatic=true
+set console_setting console=tty1
+set boot_params net.ifnames=1 vlan=vlan2017:eno49 ip=vlan2017:dhcp ${console_setting} rd.cos.disable root=live:${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-rootfs-amd64.squashfs rd.noverifyssl intel_iommu=on amd_iommu=on iommu=pt
+kernel ${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-vmlinuz-amd64 ${install_params} ${boot_params}
+initrd ${harvester_artifact_server}/${harvester_desired_version}/harvester-${harvester_desired_version}-initrd-amd64
+echo
+boot
